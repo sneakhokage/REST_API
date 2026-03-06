@@ -1,53 +1,46 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
 
-from schemas.book import BookCreateRequest, BookStatus
+from models.book_model import Book
+from repository.book_repository import BookRepository
+from schemas.book import BookCreateRequest
 
 
 class BookService:
-    def __init__(self, repository):
+    def __init__(self, repository: BookRepository):
         self.repository = repository
 
     async def get_all(
         self,
-        status: Optional[BookStatus] = None,
-        author: Optional[str] = None,
-        sort_by: Optional[str] = None,
-        order: str = "asc",
-    ) -> list[dict]:
-        items = list(await self.repository.get_all())
+        status: str | None,
+        author: str | None,
+        sort_by: str | None,
+        order: str,
+        limit: int,
+        offset: int,
+    ):
+        return await self.repository.get_all(
+            status=status,
+            author=author,
+            sort_by=sort_by,
+            order=order,
+            limit=limit,
+            offset=offset,
+        )
 
-        if status is not None:
-            items = [x for x in items if x.get("status") == status.value]
-
-        if author is not None:
-            a = author.strip().lower()
-            items = [x for x in items if x.get("author", "").strip().lower() == a]
-
-        reverse = order.lower().strip() == "desc"
-        if sort_by == "title":
-            items.sort(key=lambda x: x.get("title", "").lower(), reverse=reverse)
-        elif sort_by == "year":
-            items.sort(key=lambda x: x.get("year", 0), reverse=reverse)
-
-        return items
-
-    async def get_by_id(self, book_id: uuid.UUID) -> dict | None:
+    async def get_by_id(self, book_id: uuid.UUID):
         return await self.repository.get_by_id(book_id)
 
-    async def create(self, book: BookCreateRequest) -> dict:
-        book_dict = {
-            "id": uuid.uuid4(),
-            "title": book.title,
-            "author": book.author,
-            "description": book.description,
-            "status": book.status.value,
-            "year": book.year,
-        }
-        return await self.repository.create(book_dict)
+    async def create(self, data: BookCreateRequest):
+        book = Book(
+            title=data.title,
+            author=data.author,
+            description=data.description,
+            status=data.status.value,
+            year=data.year,
+        )
+        return await self.repository.create(book)
 
     async def delete_idempotent(self, book_id: uuid.UUID) -> None:
-
         await self.repository.delete(book_id)
