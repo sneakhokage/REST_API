@@ -18,7 +18,7 @@ class BookService:
         sort_by: str | None,
         order: str,
         limit: int,
-        offset: int,
+        cursor: str | None,
     ):
         return await self.repository.get_all(
             status=status,
@@ -26,7 +26,7 @@ class BookService:
             sort_by=sort_by,
             order=order,
             limit=limit,
-            offset=offset,
+            cursor=cursor,
         )
 
     async def get_by_id(self, book_id: uuid.UUID):

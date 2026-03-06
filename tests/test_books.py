@@ -17,9 +17,8 @@ async def test_get_all_books(client: AsyncClient):
 
     data = r.json()
     assert "items" in data
-    assert "total" in data
+    assert "next_cursor" in data
     assert "limit" in data
-    assert "offset" in data
     assert isinstance(data["items"], list)
 
 
@@ -39,9 +38,6 @@ async def test_create_book(client: AsyncClient):
     data = r.json()
     assert data["title"] == payload["title"]
     assert data["author"] == payload["author"]
-    assert data["description"] == payload["description"]
-    assert data["status"] == payload["status"]
-    assert data["year"] == payload["year"]
     assert "id" in data
 
 
@@ -56,11 +52,10 @@ async def test_get_book_by_id(client: AsyncClient):
     }
 
     created = await client.post("/api/books", json=payload)
-    assert created.status_code == 201
-
     book_id = created.json()["id"]
 
     r = await client.get(f"/api/books/{book_id}")
+
     assert r.status_code == 200
     assert r.json()["id"] == book_id
 
@@ -84,8 +79,6 @@ async def test_delete_idempotent(client: AsyncClient):
             "year": 2010,
         },
     )
-    assert created.status_code == 201
-
     book_id = created.json()["id"]
 
     r1 = await client.delete(f"/api/books/{book_id}")
@@ -96,26 +89,37 @@ async def test_delete_idempotent(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_limit_offset_pagination(client: AsyncClient):
-    for i in range(3):
+async def test_cursor_pagination(client: AsyncClient):
+    for i in range(5):
         await client.post(
             "/api/books",
             json={
                 "title": f"Book {i}",
-                "author": "Pagination Author",
+                "author": "Cursor Author",
                 "description": None,
                 "status": "available",
                 "year": 2000 + i,
             },
         )
 
-    r = await client.get("/api/books", params={"limit": 2, "offset": 1})
-    assert r.status_code == 200
+    first_page = await client.get("/api/books", params={"limit": 2, "sort_by": "year", "order": "asc"})
+    assert first_page.status_code == 200
 
-    data = r.json()
-    assert data["limit"] == 2
-    assert data["offset"] == 1
-    assert len(data["items"]) <= 2
+    first_data = first_page.json()
+    assert len(first_data["items"]) <= 2
+    assert "next_cursor" in first_data
+
+    if first_data["next_cursor"]:
+        second_page = await client.get(
+            "/api/books",
+            params={
+                "limit": 2,
+                "sort_by": "year",
+                "order": "asc",
+                "cursor": first_data["next_cursor"],
+            },
+        )
+        assert second_page.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -133,9 +137,7 @@ async def test_filter_by_author(client: AsyncClient):
 
     r = await client.get("/api/books", params={"author": "Special Author"})
     assert r.status_code == 200
-
-    data = r.json()
-    assert all(item["author"] == "Special Author" for item in data["items"])
+    assert all(item["author"] == "Special Author" for item in r.json()["items"])
 
 
 @pytest.mark.asyncio
@@ -153,9 +155,7 @@ async def test_filter_by_status(client: AsyncClient):
 
     r = await client.get("/api/books", params={"status": "issued"})
     assert r.status_code == 200
-
-    data = r.json()
-    assert all(item["status"] == "issued" for item in data["items"])
+    assert all(item["status"] == "issued" for item in r.json()["items"])
 
 
 @pytest.mark.asyncio

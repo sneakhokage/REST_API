@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from repository.database import get_session
 from repository.book_repository import BookRepository
-from schemas.book import BookCreateRequest, BookResponse, BookListResponse, BookStatus
+from schemas.book import (
+    BookCreateRequest,
+    BookResponse,
+    BookListCursorResponse,
+    BookStatus,
+)
 from services.book_service import BookService
 
 router = APIRouter(prefix="/api", tags=["Books"])
@@ -19,31 +24,42 @@ async def health():
     return {"status": "ok"}
 
 
-@router.get("/books", response_model=BookListResponse, status_code=status.HTTP_200_OK)
+@router.get("/books", response_model=BookListCursorResponse, status_code=status.HTTP_200_OK)
 async def get_all_books(
     status_filter: BookStatus | None = Query(default=None, alias="status"),
     author: str | None = Query(default=None),
-    sort_by: Literal["title", "year"] | None = Query(default=None),
+    sort_by: Literal["title", "year"] | None = Query(default="year"),
     order: Literal["asc", "desc"] = Query(default="asc"),
     limit: int = Query(default=10, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    cursor: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
 ):
     service = BookService(BookRepository(session))
-    items, total = await service.get_all(
+    books = await service.get_all(
         status=status_filter.value if status_filter else None,
         author=author,
         sort_by=sort_by,
         order=order,
         limit=limit,
-        offset=offset,
+        cursor=cursor,
     )
+
+    has_next = len(books) > limit
+    items = books[:limit]
+
+    next_cursor = None
+    if has_next and items:
+        last_item = items[-1]
+
+        if sort_by == "title":
+            next_cursor = f"{last_item.title}|{last_item.id}"
+        else:
+            next_cursor = f"{last_item.year}|{last_item.id}"
 
     return {
         "items": items,
-        "total": total,
+        "next_cursor": next_cursor,
         "limit": limit,
-        "offset": offset,
     }
 
 

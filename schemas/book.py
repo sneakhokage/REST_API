@@ -38,8 +38,7 @@ class BookResponse(BaseModel):
     year: int
 
 
-class BookListResponse(BaseModel):
+class BookListCursorResponse(BaseModel):
     items: list[BookResponse]
-    total: int
+    next_cursor: Optional[str] = None
     limit: int
-    offset: int
