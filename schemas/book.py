@@ -4,7 +4,7 @@ import uuid
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class BookStatus(str, Enum):
@@ -21,16 +21,24 @@ class BookCreateRequest(BaseModel):
 
     @field_validator("title")
     @classmethod
-    def title_not_start_with_underscore(cls, v: str) -> str:
-        if v.startswith("_"):
+    def title_not_start_with_underscore(cls, value: str) -> str:
+        if value.startswith("_"):
             raise ValueError("Title must not start with underscore")
-        return v
+        return value
 
 
 class BookResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     title: str
     author: str
-    description: Optional[str] = None
+    description: Optional[str]
     status: BookStatus
     year: int
+
+
+class BookListCursorResponse(BaseModel):
+    items: list[BookResponse]
+    next_cursor: Optional[str] = None
+    limit: int

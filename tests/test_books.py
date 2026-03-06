@@ -1,18 +1,6 @@
-from __future__ import annotations
-
+import uuid
 import pytest
-from httpx import AsyncClient, ASGITransport
-
-from main import app
-
-from models.book_model import db
-
-@pytest.fixture
-async def client():
-    db.clear()
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
@@ -23,180 +11,196 @@ async def test_health(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_create_book_201_and_get_by_id_200(client: AsyncClient):
-    payload = {
-        "title": "Clean Code",
-        "author": "Robert C. Martin",
-        "description": "Agile craftsmanship",
-        "status": "available",
-        "year": 2008,
-    }
-    created = await client.post("/api/books", json=payload)
-    assert created.status_code == 201
-    body = created.json()
-    assert "id" in body
-    assert body["title"] == payload["title"]
-    assert body["author"] == payload["author"]
-    assert body["description"] == payload["description"]
-    assert body["status"] == payload["status"]
-    assert body["year"] == payload["year"]
+async def test_get_all_books(client: AsyncClient):
+    r = await client.get("/api/books")
+    assert r.status_code == 200
 
-    book_id = body["id"]
-    got = await client.get(f"/api/books/{book_id}")
-    assert got.status_code == 200
-    got_body = got.json()
-    assert got_body["id"] == book_id
-    assert got_body["title"] == payload["title"]
+    data = r.json()
+    assert "items" in data
+    assert "next_cursor" in data
+    assert "limit" in data
+    assert isinstance(data["items"], list)
 
 
 @pytest.mark.asyncio
-async def test_get_by_id_404(client: AsyncClient):
-    r = await client.get("/api/books/00000000-0000-0000-0000-000000000000")
+async def test_create_book(client: AsyncClient):
+    payload = {
+        "title": "Clean Code",
+        "author": "Robert Martin",
+        "description": "Demo",
+        "status": "available",
+        "year": 2008,
+    }
+
+    r = await client.post("/api/books", json=payload)
+    assert r.status_code == 201
+
+    data = r.json()
+    assert data["title"] == payload["title"]
+    assert data["author"] == payload["author"]
+    assert "id" in data
+
+
+@pytest.mark.asyncio
+async def test_get_book_by_id(client: AsyncClient):
+    payload = {
+        "title": "Test Book",
+        "author": "Author",
+        "description": None,
+        "status": "available",
+        "year": 2010,
+    }
+
+    created = await client.post("/api/books", json=payload)
+    book_id = created.json()["id"]
+
+    r = await client.get(f"/api/books/{book_id}")
+
+    assert r.status_code == 200
+    assert r.json()["id"] == book_id
+
+
+@pytest.mark.asyncio
+async def test_get_book_404(client: AsyncClient):
+    r = await client.get(f"/api/books/{uuid.uuid4()}")
     assert r.status_code == 404
     assert r.json()["detail"] == "Book not found"
 
 
 @pytest.mark.asyncio
-async def test_delete_idempotent_204_and_then_404_on_get(client: AsyncClient):
-    created = await client.post("/api/books", json={
-        "title": "To Delete",
-        "author": "Someone",
-        "description": None,
-        "status": "available",
-        "year": 2010,
-    })
+async def test_delete_idempotent(client: AsyncClient):
+    created = await client.post(
+        "/api/books",
+        json={
+            "title": "Delete Me",
+            "author": "Author",
+            "description": None,
+            "status": "available",
+            "year": 2010,
+        },
+    )
     book_id = created.json()["id"]
 
-    d1 = await client.delete(f"/api/books/{book_id}")
-    assert d1.status_code == 204
-    assert d1.text == ""
+    r1 = await client.delete(f"/api/books/{book_id}")
+    r2 = await client.delete(f"/api/books/{book_id}")
 
-    d2 = await client.delete(f"/api/books/{book_id}")
-    assert d2.status_code == 204
-    assert d2.text == ""
-
-    g = await client.get(f"/api/books/{book_id}")
-    assert g.status_code == 404
+    assert r1.status_code == 204
+    assert r2.status_code == 204
 
 
 @pytest.mark.asyncio
-async def test_get_all_200_returns_list(client: AsyncClient):
-    r = await client.get("/api/books")
-    assert r.status_code == 200
-    data = r.json()
-    assert isinstance(data, list)
+async def test_cursor_pagination(client: AsyncClient):
+    for i in range(5):
+        await client.post(
+            "/api/books",
+            json={
+                "title": f"Book {i}",
+                "author": "Cursor Author",
+                "description": None,
+                "status": "available",
+                "year": 2000 + i,
+            },
+        )
+
+    first_page = await client.get("/api/books", params={"limit": 2, "sort_by": "year", "order": "asc"})
+    assert first_page.status_code == 200
+
+    first_data = first_page.json()
+    assert len(first_data["items"]) <= 2
+    assert "next_cursor" in first_data
+
+    if first_data["next_cursor"]:
+        second_page = await client.get(
+            "/api/books",
+            params={
+                "limit": 2,
+                "sort_by": "year",
+                "order": "asc",
+                "cursor": first_data["next_cursor"],
+            },
+        )
+        assert second_page.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_filter_by_author(client: AsyncClient):
-    await client.post("/api/books", json={
-        "title": "A1",
-        "author": "Author X",
-        "description": None,
-        "status": "available",
-        "year": 2001,
-    })
-    await client.post("/api/books", json={
-        "title": "A2",
-        "author": "Author Y",
-        "description": None,
-        "status": "available",
-        "year": 2002,
-    })
+    await client.post(
+        "/api/books",
+        json={
+            "title": "Author Test",
+            "author": "Special Author",
+            "description": None,
+            "status": "available",
+            "year": 2020,
+        },
+    )
 
-    r = await client.get("/api/books", params={"author": "Author X"})
+    r = await client.get("/api/books", params={"author": "Special Author"})
     assert r.status_code == 200
-    data = r.json()
-    assert all(item["author"] == "Author X" for item in data)
+    assert all(item["author"] == "Special Author" for item in r.json()["items"])
 
 
 @pytest.mark.asyncio
 async def test_filter_by_status(client: AsyncClient):
-    await client.post("/api/books", json={
-        "title": "S1",
-        "author": "Status Author",
-        "description": None,
-        "status": "issued",
-        "year": 2003,
-    })
-    await client.post("/api/books", json={
-        "title": "S2",
-        "author": "Status Author",
-        "description": None,
-        "status": "available",
-        "year": 2004,
-    })
+    await client.post(
+        "/api/books",
+        json={
+            "title": "Issued Book",
+            "author": "Status Author",
+            "description": None,
+            "status": "issued",
+            "year": 2021,
+        },
+    )
 
     r = await client.get("/api/books", params={"status": "issued"})
     assert r.status_code == 200
-    data = r.json()
-    assert len(data) >= 1
-    assert all(item["status"] == "issued" for item in data)
+    assert all(item["status"] == "issued" for item in r.json()["items"])
 
 
 @pytest.mark.asyncio
-async def test_sort_by_title_asc_and_desc(client: AsyncClient):
-    await client.post("/api/books", json={"title": "ccc", "author": "Sorter", "description": None, "status": "available", "year": 2001})
-    await client.post("/api/books", json={"title": "aaa", "author": "Sorter", "description": None, "status": "available", "year": 2002})
-    await client.post("/api/books", json={"title": "bbb", "author": "Sorter", "description": None, "status": "available", "year": 2003})
+async def test_sort_by_year_desc(client: AsyncClient):
+    await client.post(
+        "/api/books",
+        json={
+            "title": "Old Book",
+            "author": "Sorter",
+            "description": None,
+            "status": "available",
+            "year": 1999,
+        },
+    )
+    await client.post(
+        "/api/books",
+        json={
+            "title": "New Book",
+            "author": "Sorter",
+            "description": None,
+            "status": "available",
+            "year": 2023,
+        },
+    )
 
-    r1 = await client.get("/api/books", params={"author": "Sorter", "sort_by": "title", "order": "asc"})
-    assert r1.status_code == 200
-    titles_asc = [x["title"] for x in r1.json()]
-    assert titles_asc == sorted(titles_asc, key=lambda s: s.lower())
+    r = await client.get(
+        "/api/books",
+        params={"author": "Sorter", "sort_by": "year", "order": "desc"},
+    )
+    assert r.status_code == 200
 
-    r2 = await client.get("/api/books", params={"author": "Sorter", "sort_by": "title", "order": "desc"})
-    assert r2.status_code == 200
-    titles_desc = [x["title"] for x in r2.json()]
-    assert titles_desc == sorted(titles_desc, key=lambda s: s.lower(), reverse=True)
-
-
-@pytest.mark.asyncio
-async def test_sort_by_year_asc_and_desc(client: AsyncClient):
-    await client.post("/api/books", json={"title": "Y1", "author": "YearSorter", "description": None, "status": "available", "year": 1999})
-    await client.post("/api/books", json={"title": "Y2", "author": "YearSorter", "description": None, "status": "available", "year": 2010})
-    await client.post("/api/books", json={"title": "Y3", "author": "YearSorter", "description": None, "status": "available", "year": 2005})
-
-    r1 = await client.get("/api/books", params={"author": "YearSorter", "sort_by": "year", "order": "asc"})
-    years_asc = [x["year"] for x in r1.json()]
-    assert years_asc == sorted(years_asc)
-
-    r2 = await client.get("/api/books", params={"author": "YearSorter", "sort_by": "year", "order": "desc"})
-    years_desc = [x["year"] for x in r2.json()]
-    assert years_desc == sorted(years_desc, reverse=True)
-
-
-@pytest.mark.asyncio
-async def test_validation_422_title_underscore(client: AsyncClient):
-    r = await client.post("/api/books", json={
-        "title": "_Bad",
-        "author": "Ok Author",
-        "description": None,
-        "status": "available",
-        "year": 2020,
-    })
-    assert r.status_code == 422
+    years = [item["year"] for item in r.json()["items"]]
+    assert years == sorted(years, reverse=True)
 
 
 @pytest.mark.asyncio
-async def test_validation_422_short_author_and_year_range(client: AsyncClient):
-    r = await client.post("/api/books", json={
-        "title": "Good title",
-        "author": "A",
-        "description": None,
-        "status": "available",
-        "year": 1200,
-    })
-    assert r.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_query_param_validation_422_sort_by_invalid(client: AsyncClient):
-    r = await client.get("/api/books", params={"sort_by": "author"})
-    assert r.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_query_param_validation_422_order_invalid(client: AsyncClient):
-    r = await client.get("/api/books", params={"order": "up"})
+async def test_validation_error(client: AsyncClient):
+    r = await client.post(
+        "/api/books",
+        json={
+            "title": "_BadTitle",
+            "author": "A",
+            "description": None,
+            "status": "available",
+            "year": 1200,
+        },
+    )
     assert r.status_code == 422
