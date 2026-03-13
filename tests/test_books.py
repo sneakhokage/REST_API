@@ -1,206 +1,103 @@
-import uuid
+from httpx import AsyncClient, ASGITransport
 import pytest
-from httpx import AsyncClient
+from main import app
+
+# Валідний ObjectID для тесту 404 (24 символи)
+NOT_FOUND_ID = "507f1f77bcf86cd799439011"
+
+
+@pytest.fixture
+def transport():
+    return ASGITransport(app=app)
 
 
 @pytest.mark.asyncio
-async def test_health(client: AsyncClient):
-    r = await client.get("/api/health")
-    assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
-
-
-@pytest.mark.asyncio
-async def test_get_all_books(client: AsyncClient):
-    r = await client.get("/api/books")
-    assert r.status_code == 200
-
-    data = r.json()
-    assert "items" in data
-    assert "next_cursor" in data
-    assert "limit" in data
-    assert isinstance(data["items"], list)
-
-
-@pytest.mark.asyncio
-async def test_create_book(client: AsyncClient):
-    payload = {
-        "title": "Clean Code",
-        "author": "Robert Martin",
-        "description": "Demo",
-        "status": "available",
-        "year": 2008,
-    }
-
-    r = await client.post("/api/books", json=payload)
-    assert r.status_code == 201
-
-    data = r.json()
-    assert data["title"] == payload["title"]
-    assert data["author"] == payload["author"]
+async def test_create_book(transport):
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post("/api/books", json={
+            "title": "Test Book",
+            "author": "Author",
+            "description": "Test description",
+            "status": "available",
+            "year": 2026
+        })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["title"] == "Test Book"
     assert "id" in data
 
 
 @pytest.mark.asyncio
-async def test_get_book_by_id(client: AsyncClient):
-    payload = {
-        "title": "Test Book",
-        "author": "Author",
-        "description": None,
-        "status": "available",
-        "year": 2010,
-    }
-
-    created = await client.post("/api/books", json=payload)
-    book_id = created.json()["id"]
-
-    r = await client.get(f"/api/books/{book_id}")
-
-    assert r.status_code == 200
-    assert r.json()["id"] == book_id
+async def test_get_books(transport):
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/api/books")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
 
 
 @pytest.mark.asyncio
-async def test_get_book_404(client: AsyncClient):
-    r = await client.get(f"/api/books/{uuid.uuid4()}")
-    assert r.status_code == 404
-    assert r.json()["detail"] == "Book not found"
+async def test_get_book_by_id(transport):
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # Створюємо книгу, щоб точно знати ID
+        create = await ac.post("/api/books", json={
+            "title": "Unique Book",
+            "author": "Unique Author",
+            "description": "Desc",
+            "status": "available",
+            "year": 2026
+        })
+        book_id = create.json()["id"]
+
+        response = await ac.get(f"/api/books/{book_id}")
+    assert response.status_code == 200
+    assert response.json()["id"] == book_id
 
 
 @pytest.mark.asyncio
-async def test_delete_idempotent(client: AsyncClient):
-    created = await client.post(
-        "/api/books",
-        json={
-            "title": "Delete Me",
+async def test_update_book(transport):
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # Створюємо книгу
+        create = await ac.post("/api/books", json={
+            "title": "Old Title",
             "author": "Author",
-            "description": None,
+            "description": "Old desc",
             "status": "available",
-            "year": 2010,
-        },
-    )
-    book_id = created.json()["id"]
+            "year": 2020
+        })
+        book_id = create.json()["id"]
 
-    r1 = await client.delete(f"/api/books/{book_id}")
-    r2 = await client.delete(f"/api/books/{book_id}")
-
-    assert r1.status_code == 204
-    assert r2.status_code == 204
+        # Оновлюємо її
+        response = await ac.put(f"/api/books/{book_id}", json={
+            "title": "New Title",
+            "author": "Author",
+            "description": "New desc",
+            "status": "borrowed",
+            "year": 2026
+        })
+    assert response.status_code == 200
+    assert response.json()["title"] == "New Title"
 
 
 @pytest.mark.asyncio
-async def test_cursor_pagination(client: AsyncClient):
-    for i in range(5):
-        await client.post(
-            "/api/books",
-            json={
-                "title": f"Book {i}",
-                "author": "Cursor Author",
-                "description": None,
-                "status": "available",
-                "year": 2000 + i,
-            },
-        )
+async def test_delete_book(transport):
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # Створюємо книгу
+        create = await ac.post("/api/books", json={
+            "title": "To Delete",
+            "author": "Author",
+            "description": "Desc",
+            "status": "available",
+            "year": 2022
+        })
+        book_id = create.json()["id"]
 
-    first_page = await client.get("/api/books", params={"limit": 2, "sort_by": "year", "order": "asc"})
-    assert first_page.status_code == 200
-
-    first_data = first_page.json()
-    assert len(first_data["items"]) <= 2
-    assert "next_cursor" in first_data
-
-    if first_data["next_cursor"]:
-        second_page = await client.get(
-            "/api/books",
-            params={
-                "limit": 2,
-                "sort_by": "year",
-                "order": "asc",
-                "cursor": first_data["next_cursor"],
-            },
-        )
-        assert second_page.status_code == 200
+        # Видаляємо
+        response = await ac.delete(f"/api/books/{book_id}")
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_filter_by_author(client: AsyncClient):
-    await client.post(
-        "/api/books",
-        json={
-            "title": "Author Test",
-            "author": "Special Author",
-            "description": None,
-            "status": "available",
-            "year": 2020,
-        },
-    )
-
-    r = await client.get("/api/books", params={"author": "Special Author"})
-    assert r.status_code == 200
-    assert all(item["author"] == "Special Author" for item in r.json()["items"])
-
-
-@pytest.mark.asyncio
-async def test_filter_by_status(client: AsyncClient):
-    await client.post(
-        "/api/books",
-        json={
-            "title": "Issued Book",
-            "author": "Status Author",
-            "description": None,
-            "status": "issued",
-            "year": 2021,
-        },
-    )
-
-    r = await client.get("/api/books", params={"status": "issued"})
-    assert r.status_code == 200
-    assert all(item["status"] == "issued" for item in r.json()["items"])
-
-
-@pytest.mark.asyncio
-async def test_sort_by_year_desc(client: AsyncClient):
-    await client.post(
-        "/api/books",
-        json={
-            "title": "Old Book",
-            "author": "Sorter",
-            "description": None,
-            "status": "available",
-            "year": 1999,
-        },
-    )
-    await client.post(
-        "/api/books",
-        json={
-            "title": "New Book",
-            "author": "Sorter",
-            "description": None,
-            "status": "available",
-            "year": 2023,
-        },
-    )
-
-    r = await client.get(
-        "/api/books",
-        params={"author": "Sorter", "sort_by": "year", "order": "desc"},
-    )
-    assert r.status_code == 200
-
-    years = [item["year"] for item in r.json()["items"]]
-    assert years == sorted(years, reverse=True)
-
-
-@pytest.mark.asyncio
-async def test_validation_error(client: AsyncClient):
-    r = await client.post(
-        "/api/books",
-        json={
-            "title": "_BadTitle",
-            "author": "A",
-            "description": None,
-            "status": "available",
-            "year": 1200,
-        },
-    )
-    assert r.status_code == 422
+async def test_book_not_found(transport):
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get(f"/api/books/{NOT_FOUND_ID}")
+    assert response.status_code == 404

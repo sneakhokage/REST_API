@@ -10,6 +10,12 @@ dependencies = [
     "asyncpg>=0.30.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.2.2",
+    "motor>=3.7.1",
+    "pydantic-mongo>=3.1.0",
+    "beanie>=2.0.1",
+    "myapplication>=0.1.0",
+    "schemas>=0.7.1",
+    "book-isbn>=0.0.2",
 ]
 
 [dependency-groups]
