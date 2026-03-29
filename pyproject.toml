@@ -1,26 +1,21 @@
 [project]
 name = "rest-api"
 version = "0.2.0"
-description = "Library REST API with PostgreSQL and SQLAlchemy"
+description = "Library REST API with MongoDB and FastAPI"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.134.0",
     "uvicorn>=0.41.0",
-    "sqlalchemy>=2.0.0",
-    "asyncpg>=0.30.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.2.2",
     "motor>=3.7.1",
     "pydantic-mongo>=3.1.0",
-    "beanie>=2.0.1",
-    "myapplication>=0.1.0",
-    "schemas>=0.7.1",
-    "book-isbn>=0.0.2",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
 ]
 
 [dependency-groups]
 dev = [
-    "aiosqlite>=0.22.1",
     "httpx>=0.28.1",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",

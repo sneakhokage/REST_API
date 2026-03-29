@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN pip install fastapi uvicorn motor pydantic pydantic-mongo
+RUN pip install fastapi uvicorn motor pydantic pydantic-mongo \
+    "python-jose[cryptography]" bcrypt
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
