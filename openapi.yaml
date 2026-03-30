@@ -1,0 +1,413 @@
+openapi: 3.1.0
+info:
+  title: Library API
+  version: 0.1.0
+
+paths:
+  /api/auth/register:
+    post:
+      tags:
+        - auth
+      summary: Register
+      operationId: register_api_auth_register_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegister'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+              example:
+                message: User registered successfully
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+  /api/auth/login:
+    post:
+      tags:
+        - auth
+      summary: Login
+      operationId: login_api_auth_login_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLogin'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example
+                refresh_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh
+                token_type: bearer
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+  /api/auth/refresh:
+    post:
+      tags:
+        - auth
+      summary: Refresh
+      operationId: refresh_api_auth_refresh_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.new_example
+                refresh_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.new_refresh
+                token_type: bearer
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+  /api/books:
+    get:
+      tags:
+        - books
+      summary: Get Books
+      operationId: get_books_api_books_get
+      security:
+        - HTTPBearer: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Book'
+              example:
+                - id: 507f1f77bcf86cd799439011
+                  title: The Poppy War
+                  author: R.F. Kuang
+                  description: A dark fantasy novel inspired by modern Chinese history
+                  status: available
+                  year: 2018
+                - id: 507f1f77bcf86cd799439012
+                  title: Arthur and the Minimoys
+                  author: Luc Besson
+                  description: A young boy discovers a world of tiny people in his garden
+                  status: borrowed
+                  year: 2002
+                - id: 507f1f77bcf86cd799439013
+                  title: Assassin's Apprentice
+                  author: Robin Hobb
+                  description: A young boy with magical abilities trains to become a royal assassin
+                  status: available
+                  year: 1995
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+    post:
+      tags:
+        - books
+      summary: Create Book
+      operationId: create_book_api_books_post
+      security:
+        - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+              example:
+                id: 507f1f77bcf86cd799439011
+                title: The Poppy War
+                author: R.F. Kuang
+                description: A dark fantasy novel inspired by modern Chinese history
+                status: available
+                year: 2018
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+  /api/books/{book_id}:
+    get:
+      tags:
+        - books
+      summary: Get Book
+      operationId: get_book_api_books__book_id__get
+      security:
+        - HTTPBearer: []
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+              example:
+                id: 507f1f77bcf86cd799439011
+                title: The Poppy War
+                author: R.F. Kuang
+                description: A dark fantasy novel inspired by modern Chinese history
+                status: available
+                year: 2018
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+    put:
+      tags:
+        - books
+      summary: Update Book
+      operationId: update_book_api_books__book_id__put
+      security:
+        - HTTPBearer: []
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+              example:
+                id: 507f1f77bcf86cd799439011
+                title: The Poppy War
+                author: R.F. Kuang
+                description: A dark fantasy novel inspired by modern Chinese history
+                status: available
+                year: 2018
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+    delete:
+      tags:
+        - books
+      summary: Delete Book
+      operationId: delete_book_api_books__book_id__delete
+      security:
+        - HTTPBearer: []
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+              example:
+                message: Book deleted
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+components:
+  schemas:
+    Book:
+      type: object
+      required:
+        - title
+        - author
+        - description
+        - status
+        - year
+        - id
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        year:
+          type: integer
+
+    BookCreate:
+      type: object
+      required:
+        - title
+        - author
+        - description
+        - status
+        - year
+      properties:
+        title:
+          type: string
+        author:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        year:
+          type: integer
+
+    UserRegister:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    UserLogin:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    TokenResponse:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          default: bearer
+
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+
+    HTTPValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+
+    ValidationError:
+      type: object
+      required:
+        - loc
+        - msg
+        - type
+      properties:
+        loc:
+          type: array
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+        msg:
+          type: string
+        type:
+          type: string
+
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

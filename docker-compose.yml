@@ -32,5 +32,14 @@ services:
       - MONGO_URL=mongodb://mongo_admin:password@mongo:27017/?authSource=admin
       - REDIS_URL=redis://redis:6379
 
+  prism:
+    image: stoplight/prism:4
+    container_name: library_prism
+    ports:
+      - "4010:4010"
+    volumes:
+      - ./openapi.yaml:/tmp/openapi.yaml
+    command: mock -h 0.0.0.0 /tmp/openapi.yaml
+
 volumes:
   mongo_data:
