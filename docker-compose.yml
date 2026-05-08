@@ -28,6 +28,7 @@ services:
     depends_on:
       - mongo
       - redis
+      - prism
     environment:
       - MONGO_URL=mongodb://mongo_admin:password@mongo:27017/?authSource=admin
       - REDIS_URL=redis://redis:6379

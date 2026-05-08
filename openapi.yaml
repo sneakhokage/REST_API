@@ -101,8 +101,6 @@ paths:
         - books
       summary: Get Books
       operationId: get_books_api_books_get
-      security:
-        - HTTPBearer: []
       parameters:
         - name: limit
           in: query
@@ -191,8 +189,6 @@ paths:
         - books
       summary: Get Book
       operationId: get_book_api_books__book_id__get
-      security:
-        - HTTPBearer: []
       parameters:
         - name: book_id
           in: path
@@ -404,8 +400,7 @@ components:
               - type: integer
         msg:
           type: string
-        type:
-          type: string
+        type:type: string
 
   securitySchemes:
     HTTPBearer:

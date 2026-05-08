@@ -1,4 +1,5 @@
 import time
+import uuid
 from fastapi import Request, HTTPException
 from repository.redis import get_redis
 
@@ -7,7 +8,6 @@ RATE_LIMITS = {
     "anonymous": (2, 60),
 }
 
-
 async def rate_limit(request: Request, user_id: str | None = None):
     r = await get_redis()
 
@@ -15,8 +15,8 @@ async def rate_limit(request: Request, user_id: str | None = None):
     limit_type = "authenticated" if user_id else "anonymous"
     limit, period = RATE_LIMITS[limit_type]
 
-    key = f"rate_limit_{identity}"
-    now = int(time.time())
+    key = f"rate_limit:{limit_type}:{identity}"
+    now = time.time()
     window_start = now - period
 
     await r.zremrangebyscore(key, min=0, max=window_start)
@@ -25,5 +25,6 @@ async def rate_limit(request: Request, user_id: str | None = None):
     if request_count >= limit:
         raise HTTPException(status_code=429, detail="Too many requests")
 
-    await r.zadd(key, {str(now): now})
+    member = f"{now}:{uuid.uuid4().hex}"
+    await r.zadd(key, {member: now})
     await r.expire(key, period)
